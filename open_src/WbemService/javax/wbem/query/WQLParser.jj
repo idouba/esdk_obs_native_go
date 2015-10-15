@@ -1,0 +1,619 @@
+/*
+ *EXHIBIT A - Sun Industry Standards Source License
+ *
+ *"The contents of this file are subject to the Sun Industry
+ *Standards Source License Version 1.2 (the "License");
+ *You may not use this file except in compliance with the
+ *License. You may obtain a copy of the 
+ *License at http://wbemservices.sourceforge.net/license.html
+ *
+ *Software distributed under the License is distributed on
+ *an "AS IS" basis, WITHOUT WARRANTY OF ANY KIND, either
+ *express or implied. See the License for the specific
+ *language governing rights and limitations under the License.
+ *
+ *The Original Code is WBEM Services.
+ *
+ *The Initial Developer of the Original Code is:
+ *Sun Microsystems, Inc.
+ *
+ *Portions created by: Sun Microsystems, Inc.
+ *are Copyright © 2001 Sun Microsystems, Inc.
+ *
+ *All Rights Reserved.
+ *
+ *Contributor(s): _______________________________________
+*/
+
+options {
+    STATIC=false;
+    DEBUG_PARSER=false;
+}
+
+PARSER_BEGIN(WQLParser)
+
+package javax.wbem.query;
+
+import java.io.*;
+
+import java.util.Vector;
+import javax.wbem.cim.UnsignedInt64;
+
+/**
+ * JavaCC specification for a WQL parser for a subset of ANSI SQL
+ * 
+ * @version	1.1 03/01/01
+ * @author	Sun Microsystems, Inc.
+ */
+
+public class WQLParser {
+
+  /* The WQLParser is based on the SQL92 grammar. The
+   * non-terminals, which in the SQL grammar are of the form
+   *
+   *   <character value expression>
+   *
+   * are here rendered in the following form:
+   *
+   *   characterValueExpression
+   *
+   * Subsetting is indicated with comments.
+   */
+
+  public static void main(String args[]) {
+    InputStream in = System.in;
+    StringBuffer line;
+    WQLParser parser = new WQLParser(System.in);
+    System.out.println("Enter SQL one per line. End with <EOF>");
+    try {
+      while(true) {			// get lines
+	System.out.print("\nInputSQL:  ");
+	line = new StringBuffer();
+	int b;
+	while((b = in.read()) != -1 && b != '\n') {		// get characters
+	  line.append((char)b);
+	}
+	line.append("\n");	// to test end-of-line comments
+	System.out.println("ReadSQL: " + line.toString());
+	ByteArrayInputStream lineStream = 
+	  new ByteArrayInputStream(line.toString().getBytes());
+	parser.ReInit(lineStream);
+	WQLExp q;
+	try {
+	  q = parser.querySpecification();
+	  System.out.println("toString: " + q);
+	}
+	catch (ParseException e) {
+	  System.out.println(e);
+	}
+
+	// Run it through again...
+	lineStream = new ByteArrayInputStream(line.toString().getBytes());
+	parser.ReInit(lineStream);
+	try {
+	  q = parser.querySpecification();
+	  System.out.println("Repeated: " + q);
+	}
+	catch (ParseException e) {
+	  System.out.println(e);
+	}
+	if (b == -1) break;
+      }
+    }
+    catch (java.io.IOException e) {
+      System.err.println(e);
+    }
+  }
+
+}
+
+PARSER_END(WQLParser)
+
+SKIP : /* White space */
+{
+  
+    " "
+  | "\t"
+  | "\n"
+  | "\r"
+
+}
+
+SPECIAL_TOKEN : /* Comments */
+
+/* 
+ * These include both Java-style and SQL style comments. They were
+ * initially included to document tests of the SQL subset parser.
+ */
+{
+  <SINGLE_LINE_COMMENT: ("//"|"--") (~["\n","\r"])* ("\n"|"\r"|"\r\n")>
+| <FORMAL_COMMENT: "/**" (~["*"])* "*" ("*" | (~["*","/"] (~["*"])* "*"))* "/">
+| <MULTI_LINE_COMMENT: "/*" (~["*"])* "*" ("*" | (~["*","/"] (~["*"])* "*"))* "/">
+}
+
+TOKEN : /* Operators excluding ISA, making it a case insensitive keyword */
+{
+
+    < notEqualsOperator : "<>" >
+  | < lessThanOrEqualsOperator : "<=" >
+  | < lessThanOperator : "<" >
+  | < equalsOperator : "=" >
+  | < greaterThanOrEqualsOperator : ">=" >
+  | < greaterThanOperator : ">" >
+  | < plusSign : "+" >
+  | < minusSign : "-" >
+  | < asterisk : "*" >
+  | < solidus : "/" >
+  | < leftParen : "(" >
+  | < rightParen : ")" >
+  | < period : "." >
+  | < comma : "," >
+
+}
+
+/* Keywords - case insensitive reserved words */
+TOKEN [ IGNORE_CASE ] : 
+{
+    < or: "or" >
+  | < and: "and" >
+  | < not: "not" > 
+  | < select: "select" >
+  | < from: "from" >
+  | < where: "where" >
+  | < like: "like" >
+  | < escape: "escape" >
+  | < isa: "isa" >
+}
+
+TOKEN : /* Literals */
+{
+  /* 
+   * Note: this differs from the SQL definition of <approximate numeric
+   * literal> in that it treats a string of digits with a decimal point
+   * as approximate, whereas SQL treats it as exact.
+   */
+
+    < approximateNumericLiteral :
+	  (["0"-"9"])+ "." (["0"-"9"])* (<EXPONENT>)?
+	|              "." (["0"-"9"])+ (<EXPONENT>)?
+	|                  (["0"-"9"])+ <EXPONENT>
+    >
+  |
+    < #EXPONENT: ["e","E"] (["+","-"])? (["0"-"9"])+ >
+
+  | < unsignedInteger : ( ["0"-"9"] )+ >
+
+  /*
+   * Note: This differs from the SQL definition of <character string
+   * literal> in that the SQL features character set specification and
+   * embedded comments and spacing are not supported.
+   */
+
+  | < characterStringLiteral :
+      "'"
+	(   (~["'"])
+	    | "''"
+	)*
+      "'"
+    >
+}
+
+TOKEN : /* Identifiers */
+{
+  
+  /* 
+   * Note: This differs from the SQL definition of <identifier> in
+   * that the SQL features "character set specification" and
+   * "delimited identifier" are not supported. 
+   * The letters and digits are the 8-bit subset of the Unicode
+   * letters and digits.
+   */
+
+  < identifier: <letter> (<letter>|<digit>|"_")* >
+|
+  < columnidentifier: <letter> (<letter>|<digit>|"."|"_")* >
+|
+  < #letter:
+      [
+       "\u0024",		// $
+       "\u0041"-"\u005a",	// A-Z
+       "\u005f",		// _
+       "\u0061"-"\u007a",	// a-z
+       "\u00c0"-"\u00d6",	// Letters with diacritical marks
+       "\u00d8"-"\u00f6",	// Letters with diacritical marks
+       "\u00f8"-"\u00ff"	// Letters with diacritical marks
+      ]
+  >
+|
+  < #digit:
+      [
+       "\u0030"-"\u0039"	// 0-9
+      ]
+  >
+}
+
+/* 
+ * Non-terminal grammar symbols
+ */
+
+boolean sign() :
+{}
+{
+    <plusSign> {return false;}
+  | <minusSign> {return true;}
+}
+
+NumericValue unsignedNumericLiteral() :
+{
+  NumericValue exact;
+  Token approx;
+}
+{
+    exact = exactNumericLiteral() 
+      {return exact;}
+  | approx = <approximateNumericLiteral>
+      {return new NumericValue(new Double(approx.image));}
+}
+
+
+NumericValue exactNumericLiteral() :
+{
+  Token uinteger;
+}
+{
+    uinteger = <unsignedInteger>
+      {return new NumericValue(new UnsignedInt64(uinteger.image));}
+}
+
+String columnName() :
+{
+  Token id;
+}
+{
+    id = <columnidentifier>
+      {return id.image;}
+|   id = <identifier>
+      {return id.image;}
+|   id = <asterisk>
+      {return id.image;}
+}
+
+NumericValue signedNumericLiteral() :
+{
+  NumericValue literal;
+  boolean signed = false;
+}
+{
+    [ signed = sign() ] literal = unsignedNumericLiteral()
+      {
+	if (! signed) 
+	  return literal;
+	else {
+	  if (literal.isUint() || literal.isSint())
+	    return new NumericValue(new Long(- literal.longValue()));
+	  else
+	    return new NumericValue(new Double(- literal.doubleValue()));
+	}
+      }
+}
+
+/*
+ * Note: The full SQL definition for <general literal> includes
+ * national character string, bit string, hex string, datetime and
+ * interval literals.
+ */
+StringValueExp generalLiteral() :
+{
+  Token literal;
+}
+{
+    literal = <characterStringLiteral>
+      {
+	String s = literal.image; 		// source
+	StringBuffer t = new StringBuffer(); 	// target
+
+	// remove surrounding quotes
+	s = s.substring(1, s.length()-1); 
+
+	// convert each '' to '
+	int i = 0;		// index of sequence of non-quotes
+	int j;			// index of ''
+	while ( -1 != (j = s.indexOf("''", i))) {
+	  t.append(s.substring(i, j)).append("'");
+	  i = j + 2;
+	}
+	t.append(s.substring(i));
+
+	return new StringValueExp(t.toString());
+      }
+}
+
+ValueExp anyLiteral() :
+{
+    ValueExp exp;
+}
+{
+    exp = signedNumericLiteral()
+    { return exp; }
+|
+    exp = generalLiteral()
+    { return exp; }
+}
+
+String tableName() :
+{
+  Token id;
+}
+{
+    id = <identifier>
+      {
+	return id.image;
+      }
+}
+
+/*
+ * This rule is not part of the SQL grammar. It is provided to ensure
+ * that there is no trailing garbage at the end of an otherwise legal
+ * input. 
+ */
+QueryExp searchConditionOnly() :
+{
+  QueryExp condition;
+}
+{
+  condition = searchCondition() <EOF>
+      {
+      return condition;
+      }
+}
+
+/*
+ * Note: this rule has been rewritten to avoid the left-recursion of
+ * the SQL92 grammar.
+ */
+QueryExp searchCondition() :
+{
+  QueryExp condition;
+  QueryExp term;
+}
+{
+    condition = booleanTerm() 
+      ( <or> term = booleanTerm() 
+        { condition = new OrQueryExp(condition, term); }
+      )*
+    {return condition;}
+}
+
+/*
+ * Note: this rule has been rewritten to avoid the left-recursion of
+ * the SQL92 grammar.
+ */
+QueryExp booleanTerm() :
+{
+  QueryExp term;
+  QueryExp factor;
+}
+{
+    term = booleanFactor() 
+      ( <and> factor = booleanFactor()
+        {term = new AndQueryExp(term, factor);}
+      )*
+    {return term;}
+}
+
+QueryExp booleanFactor() :
+{
+  boolean isNot = false;
+  QueryExp test;
+}
+{
+    [ <not> {isNot = true;} ] test = booleanTest()
+      {
+	if (isNot) 
+	  return new NotQueryExp(test);
+	else
+	  return test;
+      }
+}
+
+/*
+ * Note: The full SQL definition for <boolean test> includes 
+ * [ IS [ NOT ] <truth value> ]
+ */
+QueryExp booleanTest() :
+{
+  QueryExp primary;
+}
+{
+    primary = booleanPrimary()
+      {return primary;}
+}
+
+QueryExp booleanPrimary() :
+{
+  QueryExp exp;
+}
+{
+    <leftParen> exp =searchCondition() <rightParen>
+      {
+	return exp;
+      }
+|
+     exp = relOperation()
+     {
+	return exp;
+     }
+}
+
+BinaryRelQueryExp relOperation() :
+{
+  ValueExp lexp = null;
+  ValueExp rexp = null;
+  int op;
+}
+{
+
+    (
+	lexp = columnReference()
+	|
+	lexp =anyLiteral()
+    )
+    op = compOp()
+    (
+	rexp = columnReference()
+	|
+	rexp = anyLiteral()
+    )
+    { return new BinaryRelQueryExp(op, lexp, rexp); }
+}
+
+
+AttributeExp columnReference() :
+{
+  String attr = null;
+}
+{
+      // Not doing lookahead for qualifying table for now.
+      attr = columnName()
+      {
+          return new AttributeExp(attr);
+      }
+}
+
+/*
+ * Note: The full SQL definition for <query specification> includes an
+ * optional set quantifier.
+ */
+WQLExp querySpecification() :
+{
+  SelectList list;
+  Object [] fromWhere;		// a QualifiedAttributeExp and a QueryExp
+}
+{
+    <select> list = selectList() fromWhere = tableExpression()
+      {
+	return new SelectExp(list, (FromExp)fromWhere[0], 
+	(QueryExp)fromWhere[1]);
+	return null;
+      }
+}
+
+/*
+ * Note: The full SQL definition for <select list> includes the case of
+ * asterisk and an actual list. JMAPI only uses a list of a single
+ * item.
+ */
+SelectList selectList() :
+{
+  SelectList list = null;
+  AttributeExp exp;
+}
+{
+    exp = selectSublist()
+      {
+	list = new SelectList(exp);
+      }
+      (
+	<comma>
+	exp = selectSublist()
+	{
+	    list.addElement(exp);
+	}
+      )*
+      {
+	return list;
+      }
+}
+
+/*
+ * Note: The full SQL definition for <select sublist> includes
+ * qualifier.*.
+ */
+AttributeExp selectSublist() :
+{
+  AttributeExp col;
+}
+{
+    col = columnReference()
+      {return col;}
+}
+
+Object[] tableExpression() :
+{
+  Object [] fromWhere = new Object[2];
+  fromWhere[1] = null;
+}
+{
+    fromWhere[0] = fromClause() [ fromWhere[1] = whereClause() ]
+      {
+	return fromWhere;
+      }
+}
+
+/*
+ * Note: the full SQL definition of <table reference> includes a joined
+ * table
+ */
+QualifiedAttributeExp tableReference() :
+{
+  String classname;
+  String alias = null;
+}
+{
+    // not handling table alias for now.
+    classname = tableName()
+      {return new QualifiedAttributeExp(classname, alias, null);}
+}
+
+/*
+ * Note: the full SQL definition for <from clause> includes a list of
+ * table references.
+ */
+FromExp fromClause() :
+{
+  QualifiedAttributeExp ref;
+  NonJoinExp exp;
+}
+{
+    <from> ref = tableReference()
+      {return new NonJoinExp(ref);}
+}
+
+QueryExp whereClause() :
+{
+  QueryExp cond;
+}
+{
+    <where> cond = searchCondition()
+      {return cond;}
+}
+
+int compOp() :
+{ boolean isNot = false; }
+{
+    [ <not> {isNot = true;} ] 
+	(
+	    <like>
+	    {
+		if (isNot)
+		    return Query.NLIKE;
+		else
+		    return Query.LIKE;
+	    }
+	|
+	    <isa>
+	    {
+		if (isNot)
+		    return Query.NISA;
+		else
+		    return Query.ISA;
+	    }
+	)
+	    
+    | <equalsOperator> 			{return Query.EQ;}
+    | <notEqualsOperator> 		{return Query.NE;}
+    | <lessThanOperator> 		{return Query.LT;}
+    | <greaterThanOperator> 		{return Query.GT;}
+    | <lessThanOrEqualsOperator> 	{return Query.LE;}
+    | <greaterThanOrEqualsOperator> 	{return Query.GE;}
+}

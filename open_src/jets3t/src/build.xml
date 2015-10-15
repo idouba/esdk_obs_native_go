@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<!-- ==================================================== -->
+<!-- Build file for uds-java-sdk-->
+<!-- ==================================================== -->
+
+<project name="uds-java-sdk" default="jar" basedir=".">
+	<property name="src.dir" value="./org/jets3t/service" />
+	<property name="lib.common.dir"  value="./3rdsoft-jar" />
+	<property name="lib.dest.dir" value="../esdk_uds_sdk_java/uds-java-sdk/lib" />
+	<property name="appName" value="jets3t" />
+	<property name="classes.root.dir" value="./bin" />
+	<property name="classes.src.dir" value="./bin" />
+
+
+	<!-- Compilation Classpath 路径设置     -->
+	<path id="compile.classpath">
+		<pathelement location="${classes.src.dir}" />
+		<fileset dir="${lib.common.dir}">
+			<include name="commons-logging-1.1.1.jar" />
+			<include name="java-xmlbuilder-0.4.jar" />
+			<include name="jdom-1.1.jar" />
+			<include name="commons-codec-1.4.jar" />
+			<include name="httpclient-4.1.2.jar" />
+			<include name="httpcore-4.1.2.jar" />
+		</fileset>
+	</path>
+
+	<!-- Clean Target 删除先前的目录结构    -->
+	<target name="clean" description="Delete old build and war directories">
+		<!--delete dir="${classes.src.dir}" -->
+		<delete dir="${classes.root.dir}" />
+
+		<echo>${appName} clean is complete!</echo>
+	</target>
+
+	<!-- Prepare Target 建立打包的目的目录结构     -->
+	<target name="prepare" depends="clean" description="Prepare the working folders">
+		<mkdir dir="${classes.src.dir}" />
+		
+		<echo>${appName} prepare is complete!</echo>
+	</target>
+
+	<!-- Compile Target 编译代码，在这之前先由prepare建立目录结构 encoding="utf-8" 处理乱码    -->
+	<target name="compile" depends="prepare" description="Compile java sources">
+		<!-- Compile java class as necessary -->
+		<javac srcdir="${src.dir}" destdir="${classes.src.dir}" encoding="utf-8" debug="true" includeantruntime="true">
+			<classpath refid="compile.classpath" />
+		</javac>
+
+		<echo>${appName} compile is complete!</echo>
+	</target>
+
+	<target name="jar" depends="compile" description="Jar java sources">
+		<!-- Jar java class as necessary -->
+		<jar destfile="${lib.dest.dir}/jets3t-0.9.0.jar" encoding="utf-8" compress="true">
+			<fileset dir="${classes.src.dir}" />
+		</jar>
+
+		<echo>${appName} jar is complete!</echo>
+	</target>
+
+</project>
+
